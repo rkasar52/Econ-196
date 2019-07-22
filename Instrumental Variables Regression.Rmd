@@ -1,0 +1,111 @@
+---
+title: "econ 196 IV"
+author: "Rahul Kasar"
+date: "11/3/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+```
+
+```{r read in the data, cache=TRUE}
+df <- read.csv('usa_00006.csv')
+
+```
+
+
+
+```{r creating IV instrument}
+#Filter on the kids and order them in descending age.  
+relate.df <- df %>%
+  filter(RELATE ==3 )%>%
+  arrange(SERIAL, desc(AGE))
+#Code the Male as 2, Female as 3.
+#1 Male = 1, 2 Male =4, 1 Female =3, 2 Female = 6, 1F 1M=5
+relate.df <- relate.df %>%
+  mutate(Male =ifelse(SEX==1, 2, 3))
+#use slice to consider just the first two kids of each fmaily. Add up the number. 
+sum.d <- relate.df %>%
+  group_by(SERIAL) %>%
+  slice(1:2) %>%
+  summarise(temp=sum(Male))
+#Add the number back into the original data frame and 0 1 encode it. 
+new.d <- merge(x=df,y=sum.d, by='SERIAL')
+new.d <- new.d %>%
+   mutate(IV = ifelse(temp ==4| temp == 6,1,0))
+```
+
+```{r, cleaning data}
+#consider only females
+data <- new.d %>%
+  filter(SEX ==2)
+#consider only head of households or spouse
+data <- data%>%
+  filter(RELATE==1 | RELATE ==2)
+#get rid of missing employment values and 0 1 encode employment status
+data <- data %>%
+  filter(EMPSTAT !=0)%>%
+  mutate(Employment = ifelse(EMPSTAT==1, 1, 0))
+#consider families with at least 2 children. 
+data <- data %>%
+  filter(NCHILD>=2)
+
+
+
+```
+
+```{r Two Stage Least Square}
+#get the relevant columns
+
+#regress nchild on IV variable
+lm.first_stage <- lm(NCHILD~IV, data=data)
+#add the fitted variable to the dataframe
+data <- cbind(data, nchildhat = fitted(lm.first_stage))
+
+#regreen empstat on fitted nchild
+lm.second_stage <- lm(Employment~ nchildhat, data =data)
+summary(lm.second_stage)
+library(robustbase)
+
+
+```
+
+```{r sample data, include= FALSE, echo=FALSE}
+#consider a sample of 50 observations. 
+sample <- df[1:50,]
+#Filter on the kids and order them in descending age.  
+relate.s <- sample %>% filter(RELATE==3)
+relate.s <- relate.s %>% 
+  arrange(SERIAL, desc(AGE))
+#Code the Male as 2, Female as 3.
+#1 Male = 1, 2 Male =4, 1 Female =3, 2 Female = 6, 1F 1M=5
+relate.s <- relate.s %>% 
+  mutate(Male= ifelse(SEX==1, 2,3))
+#use slice to consider just the first two kids of each fmaily. Add up the number. 
+sum <- relate.s %>%
+  group_by(SERIAL) %>%
+  slice(1:2)%>%
+  summarise(temp = sum(Male))
+#Add the number back into the original data frame and 0 1 encode it. 
+new <- merge(x=sample, y=sum, by='SERIAL')
+new <- new %>%
+  mutate(IV = ifelse(temp ==4| temp == 6,1,0))
+  
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
