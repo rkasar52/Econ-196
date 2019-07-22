@@ -1,0 +1,130 @@
+---
+title: "Car Crash Analysis"
+author: "Rahul Kasar"
+date: "11/20/2018"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(readstata13)
+library(Stack)
+library(dplyr)
+```
+
+```{r reading data, cache=TRUE}
+dataFiles <- lapply(Sys.glob("person*.dta"), read.dta13)
+```
+
+```{r test on 1998 and 1999, echo=FALSE, include=FALSE}
+t <- as.data.frame(dataFiles[1])
+
+t$one <- rep(1, nrow(t))
+t<- t %>%
+  filter(inj_sev==4) %>%
+  group_by (state)%>%
+  summarise(deaths= sum(one))
+t <- t%>%
+  filter(state != 25) %>%
+  filter(state !=26) %>%
+  filter(state != 39)%>%
+  filter(state != 42) %>%
+  filter(state != 49)
+
+t.2 <- as.data.frame(dataFiles[2])
+t.2$one <- rep(1, nrow(t.2))
+t.2<- t.2 %>%
+  filter(inj_sev==4) %>%
+  group_by (state)%>%
+  summarise(deaths= sum(one))
+t.2$year <- rep(1997+2, nrow(t.2))
+df <- rbind(t)
+df <- rbind(t.2)
+```
+
+```{r for loop for 18 years}
+
+#create an empty list
+mybiglist <- list()
+#access the list from specific year using loop
+for (i in 1:18) {
+  temp <- as.data.frame(dataFiles[i])
+  #create columns of one and year
+  temp$one <- rep(1, nrow(temp))
+  temp$year <- rep(1997+i, nrow(temp))
+  temp <- temp %>%
+    filter(inj_sev ==4)%>%
+    group_by(state,year) %>%
+    summarise(deaths=sum(one))
+  #add temp to list
+  mybiglist[[i]] <- temp
+  #convert list to dataframe
+  df <- bind_rows(mybiglist)
+}
+
+```
+
+```{r, include=FALSE}
+# for (i in 1:unique(df$state)){
+#   a<- df[which(df$state==i),]
+#   plot(a$deaths~a$year)
+# 
+#   	
+# }
+
+```
+
+```{r creating ban variable, cache=TRUE}
+#find a more effecient way of doing this
+#removing states with weird hand held ban laws. 
+df <- df %>% 
+  filter(state != 25) %>%
+  filter(state !=26) %>%
+  filter(state != 39)%>%
+  filter(state != 42) %>%
+  filter(state != 49)
+
+df <- df %>% 
+  mutate(Ban = ifelse(state==6 & year >= 2008 | state == 7 & year >=2005 | state ==10 & year >=2011 | state== 11 & year>2011 | state ==15 & year >= 2010 | state ==17 & year >= 2014 | state==24 & year >= 2013 | state==32 & year>= 2012 | state ==34 & year >= 2007 | state == 36 & year >= 2001 | state == 50 & year >=2014 | state==53 & year >=2008| state==54 &year >=2013,1,0))
+```
+
+
+```{r binary for states, cache=TRUE}
+library(fastDummies)
+df.2 <- dummy_cols(df, select_columns = c('state', 'year'))
+df.2$state_1 <-NULL
+df.2$year_1998 <- NULL
+
+```
+
+```{r difference in difference}
+
+temp<-lm(deaths~ . - state-year, data= df.2)
+summary(temp)
+```
+
+
+state <- factor (df$state)
+state.dum <- model.matrix(~state-1)
+state.dum <- as.data.frame(state.dum)
+df <- merge(df, state.dum)
+
+```{r}
+write.table(df, 'crash', append = FALSE, sep = " ", dec = ".",
+            row.names = TRUE, col.names = TRUE)
+
+```
+
+
+```{r}
+library(foreign)
+write.dta(df, "/Users/Mooted/data.dta")
+
+```
+
+
+
